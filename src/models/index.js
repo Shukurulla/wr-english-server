@@ -1,0 +1,10 @@
+export { User } from "./User.js";
+export { Group } from "./Group.js";
+export { Task } from "./Task.js";
+export { TaskAssignment } from "./TaskAssignment.js";
+export { Submission } from "./Submission.js";
+export { Grade } from "./Grade.js";
+export { Complaint } from "./Complaint.js";
+export { FinalTest } from "./FinalTest.js";
+export { FinalTestAttempt } from "./FinalTestAttempt.js";
+export { AuditLog } from "./AuditLog.js";
