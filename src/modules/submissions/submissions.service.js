@@ -63,7 +63,16 @@ export async function startSubmission({ taskId, assignmentId, studentId }) {
     });
     return { submission, task };
   } catch (err) {
-    if (err.code === 11000) throw ApiError.conflict("You have already started this task");
+    if (err.code === 11000) {
+      // Race or stale legacy index — fall back to whatever already exists
+      const recovered = await Submission.findOne({ taskId: task._id, studentId });
+      if (recovered) {
+        const e = ApiError.conflict("You have already started this task");
+        e.details = { submission: recovered, task };
+        throw e;
+      }
+      throw ApiError.conflict("Could not create submission (duplicate key)");
+    }
     throw err;
   }
 }
