@@ -2,7 +2,10 @@ import { z } from "zod";
 
 export const startSchema = z.object({
   body: z.object({
-    assignmentId: z.string()
+    taskId: z.string().optional(),
+    assignmentId: z.string().optional()
+  }).refine((v) => v.taskId || v.assignmentId, {
+    message: "taskId or assignmentId is required"
   })
 });
 

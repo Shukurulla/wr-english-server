@@ -7,14 +7,18 @@ import { AuditLog } from "../../models/AuditLog.js";
 import { ApiError } from "../../utils/api-error.js";
 import { round1 } from "../../services/grader.service.js";
 
-// KRITIK #1: o'qituvchi faqat o'z guruhi bilan ishlashi
-async function assertTeacherOwnsGrade(gradeId, teacherId) {
+// Assignments are optional in the open-access flow, so teacher ownership can
+// only be enforced when the grade is still linked to a TaskAssignment. Otherwise
+// we allow any teacher/admin to manage the grade.
+async function assertTeacherOwnsGrade(gradeId, teacherId, role) {
   const grade = await Grade.findById(gradeId);
   if (!grade) throw ApiError.notFound("Grade not found");
+  if (role === "admin") return grade;
+  if (!grade.assignmentId) return grade;
   const assignment = await TaskAssignment.findById(grade.assignmentId);
-  if (!assignment) throw ApiError.notFound("Assignment not found");
+  if (!assignment) return grade;
   const group = await Group.findById(assignment.groupId);
-  if (!group || group.teacherId.toString() !== teacherId.toString()) {
+  if (!group || !group.teacherId || group.teacherId.toString() !== teacherId.toString()) {
     throw ApiError.forbidden("This group does not belong to you");
   }
   return grade;
@@ -33,15 +37,6 @@ export async function getMyGrades(studentId, { semester }) {
     { $match: { studentId, isFinalized: true } },
     {
       $lookup: {
-        from: "taskassignments",
-        localField: "assignmentId",
-        foreignField: "_id",
-        as: "assignment"
-      }
-    },
-    { $unwind: "$assignment" },
-    {
-      $lookup: {
         from: "tasks",
         localField: "taskId",
         foreignField: "_id",
@@ -52,15 +47,18 @@ export async function getMyGrades(studentId, { semester }) {
   ];
 
   if (semester) {
-    pipeline.push({ $match: { "assignment.semester": Number(semester) } });
+    pipeline.push({ $match: { "task.semester": Number(semester) } });
   }
 
   pipeline.push({
     $project: {
       assignmentId: 1,
+      submissionId: 1,
+      taskId: 1,
       taskTitle: "$task.title",
       type: "$task.type",
-      semester: "$assignment.semester",
+      semester: "$task.semester",
+      order: "$task.order",
       score: "$finalScore",
       maxScore: "$task.maxScore",
       isFinalized: 1,
@@ -69,7 +67,7 @@ export async function getMyGrades(studentId, { semester }) {
     }
   });
 
-  pipeline.push({ $sort: { "assignment.opensAt": 1 } });
+  pipeline.push({ $sort: { semester: 1, order: 1, finalizedAt: 1 } });
 
   const items = await Grade.aggregate(pipeline);
 
@@ -116,8 +114,8 @@ export async function getGroupGrades(groupId, semester, teacherId) {
 }
 
 // KRITIK #1 + HIGH #5: guruh va score diapazoni tekshiruvi
-export async function finalizeGrade(gradeId, { score, comment }, teacherId) {
-  const grade = await assertTeacherOwnsGrade(gradeId, teacherId);
+export async function finalizeGrade(gradeId, { score, comment }, teacherId, role) {
+  const grade = await assertTeacherOwnsGrade(gradeId, teacherId, role);
 
   if (score !== undefined && score !== null) {
     const task = await Task.findById(grade.taskId);
@@ -151,8 +149,8 @@ export async function finalizeGrade(gradeId, { score, comment }, teacherId) {
 }
 
 // KRITIK #1 + HIGH #5: guruh va score diapazoni tekshiruvi
-export async function overrideGrade(gradeId, { score, reason }, teacherId) {
-  const grade = await assertTeacherOwnsGrade(gradeId, teacherId);
+export async function overrideGrade(gradeId, { score, reason }, teacherId, role) {
+  const grade = await assertTeacherOwnsGrade(gradeId, teacherId, role);
 
   const task = await Task.findById(grade.taskId);
   if (task && (score < 0 || score > task.maxScore)) {

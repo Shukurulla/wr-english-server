@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/async-handler.js";
 
 export const start = asyncHandler(async (req, res) => {
   const result = await submissionsService.startSubmission({
+    taskId: req.body.taskId,
     assignmentId: req.body.assignmentId,
     studentId: req.user._id
   });

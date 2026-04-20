@@ -16,11 +16,11 @@ export const myComplaints = asyncHandler(async (req, res) => {
 });
 
 export const teacherComplaints = asyncHandler(async (req, res) => {
-  const data = await complaintsService.getTeacherComplaints(req.user._id, req.query.status);
+  const data = await complaintsService.getTeacherComplaints(req.user._id, req.query.status, req.user.role);
   return ok(res, data);
 });
 
 export const resolve = asyncHandler(async (req, res) => {
-  const complaint = await complaintsService.resolveComplaint(req.params.id, req.body, req.user._id);
+  const complaint = await complaintsService.resolveComplaint(req.params.id, req.body, req.user._id, req.user.role);
   return ok(res, complaint);
 });

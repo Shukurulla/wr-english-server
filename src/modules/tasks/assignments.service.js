@@ -26,33 +26,45 @@ export async function listAssignments({ groupId, status, page, limit }) {
   return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
+// New open-access flow: return every active task as a virtual assignment.
+// No TaskAssignment / group filtering; tests are visible to every student.
 export async function getMyAssignments(user) {
-  const groupId = user.studentInfo?.groupId;
-  if (!groupId) return [];
-
-  const now = new Date();
-  const assignments = await TaskAssignment.find({
-    groupId,
-    isActive: true,
-    opensAt: { $lte: now }
-  })
-    .populate("taskId", "title type semester order topic maxScore")
-    .sort({ dueAt: 1 })
+  const tasks = await Task.find({ isActive: true })
+    .sort({ semester: 1, order: 1, createdAt: 1 })
     .lean();
 
-  // Attach submission status if it exists
-  const assignmentIds = assignments.map(a => a._id);
-  const submissions = await Submission.find({ assignmentId: { $in: assignmentIds }, studentId: user._id }).lean();
-  
-  const submitMap = {};
-  submissions.forEach(sub => submitMap[sub.assignmentId.toString()] = sub);
+  const submissions = await Submission.find({
+    studentId: user._id,
+    taskId: { $in: tasks.map((t) => t._id) }
+  }).lean();
 
-  return assignments.map(a => {
-    const sub = submitMap[a._id.toString()];
-    if (sub) {
-       a.submissionStatus = sub.status;
-    }
-    return a;
+  const subMap = {};
+  submissions.forEach((s) => { subMap[s.taskId.toString()] = s; });
+
+  const now = new Date();
+  return tasks.map((t) => {
+    const sub = subMap[t._id.toString()];
+    return {
+      // Keep the shape that the frontend expects (assignment-like)
+      _id: t._id,
+      taskId: {
+        _id: t._id,
+        title: t.title,
+        type: t.type,
+        semester: t.semester,
+        order: t.order,
+        topic: t.topic,
+        maxScore: t.maxScore
+      },
+      semester: t.semester,
+      opensAt: t.createdAt || now,
+      dueAt: null,
+      closesAt: null,
+      isActive: true,
+      virtual: true,
+      submissionId: sub?._id || null,
+      submissionStatus: sub?.status || null
+    };
   });
 }
 

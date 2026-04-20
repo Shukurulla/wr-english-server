@@ -9,8 +9,8 @@ const router = Router();
 
 router.use(requireAuth);
 
-router.get("/", requireRole("teacher", "admin"), validate(schemas.listTasksSchema), ctrl.list);
-router.get("/:id", requireRole("teacher", "admin"), ctrl.get);
+router.get("/", validate(schemas.listTasksSchema), ctrl.list);
+router.get("/:id", ctrl.get);
 router.post("/", requireRole("teacher", "admin"), validate(schemas.createTaskSchema), ctrl.create);
 router.patch("/:id", requireRole("teacher", "admin"), validate(schemas.updateTaskSchema), ctrl.update);
 router.delete("/:id", requireRole("admin"), ctrl.remove);

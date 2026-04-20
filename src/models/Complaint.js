@@ -6,8 +6,8 @@ const complaintSchema = new Schema(
   {
     submissionId: { type: Schema.Types.ObjectId, ref: "Submission", required: true, unique: true },
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    assignmentId: { type: Schema.Types.ObjectId, ref: "TaskAssignment", required: true },
-    teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    assignmentId: { type: Schema.Types.ObjectId, ref: "TaskAssignment" },
+    teacherId: { type: Schema.Types.ObjectId, ref: "User" },
 
     reason: { type: String, required: true, minlength: 20, maxlength: 1000 },
     status: {

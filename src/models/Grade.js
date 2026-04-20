@@ -16,7 +16,7 @@ const gradeSchema = new Schema(
   {
     submissionId: { type: Schema.Types.ObjectId, ref: "Submission", required: true, unique: true },
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    assignmentId: { type: Schema.Types.ObjectId, ref: "TaskAssignment", required: true },
+    assignmentId: { type: Schema.Types.ObjectId, ref: "TaskAssignment" },
     taskId: { type: Schema.Types.ObjectId, ref: "Task", required: true },
 
     initialScore: { type: Number, required: true },

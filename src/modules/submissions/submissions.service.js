@@ -8,11 +8,11 @@ import { gradeReading, countWords, round1 } from "../../services/grader.service.
 import { evaluateWriting } from "../../services/ai-evaluator.service.js";
 
 // Race-safe grade yaratish (KRITIK #2)
-async function upsertGrade({ submissionId, studentId, assignmentId, taskId, score, reason, finalized }) {
+async function upsertGrade({ submissionId, studentId, taskId, score, reason, finalized }) {
   return Grade.findOneAndUpdate(
     { submissionId },
     {
-      $setOnInsert: { submissionId, studentId, assignmentId, taskId, initialScore: score },
+      $setOnInsert: { submissionId, studentId, taskId, initialScore: score },
       $set: { finalScore: score, isFinalized: finalized, ...(finalized ? { finalizedAt: new Date() } : {}) },
       $push: { history: { score, reason, at: new Date() } }
     },
@@ -20,30 +20,42 @@ async function upsertGrade({ submissionId, studentId, assignmentId, taskId, scor
   );
 }
 
-export async function startSubmission({ assignmentId, studentId }) {
-  const assignment = await TaskAssignment.findById(assignmentId);
-  if (!assignment || !assignment.isActive) throw ApiError.notFound("Assignment not found");
+export async function startSubmission({ taskId, assignmentId, studentId }) {
+  // Accept either taskId (new flow) or assignmentId (legacy flow)
+  let task;
+  let resolvedAssignmentId = null;
+
+  if (taskId) {
+    task = await Task.findById(taskId);
+    if (!task || !task.isActive) throw ApiError.notFound("Task not found");
+  } else if (assignmentId) {
+    // Legacy: if an assignmentId looks like a taskId, try Task lookup first
+    task = await Task.findById(assignmentId);
+    if (!task) {
+      const assignment = await TaskAssignment.findById(assignmentId);
+      if (!assignment || !assignment.isActive) throw ApiError.notFound("Task not found");
+      task = await Task.findById(assignment.taskId);
+      if (!task) throw ApiError.notFound("Task not found");
+      resolvedAssignmentId = assignment._id;
+    }
+  } else {
+    throw ApiError.badRequest("taskId is required");
+  }
 
   const now = new Date();
-  if (now < assignment.opensAt) throw ApiError.forbidden("Assignment not opened yet");
-  if (now > assignment.closesAt) throw ApiError.forbidden("Assignment is closed");
 
-  // Race-safe: unique index (studentId + assignmentId) xatosini handle qilish
-  const existing = await Submission.findOne({ assignmentId, studentId });
+  // Race-safe: one submission per (student, task)
+  const existing = await Submission.findOne({ taskId: task._id, studentId });
   if (existing) {
-    const task = await Task.findById(assignment.taskId);
-    const err = ApiError.conflict("You have already started this assignment");
+    const err = ApiError.conflict("You have already started this task");
     err.details = { submission: existing, task };
     throw err;
   }
 
-  const task = await Task.findById(assignment.taskId);
-  if (!task) throw ApiError.notFound("Task not found");
-
   try {
     const submission = await Submission.create({
-      assignmentId,
       taskId: task._id,
+      assignmentId: resolvedAssignmentId || undefined,
       studentId,
       type: task.type,
       status: "in_progress",
@@ -51,7 +63,7 @@ export async function startSubmission({ assignmentId, studentId }) {
     });
     return { submission, task };
   } catch (err) {
-    if (err.code === 11000) throw ApiError.conflict("You have already started this assignment");
+    if (err.code === 11000) throw ApiError.conflict("You have already started this task");
     throw err;
   }
 }
@@ -105,7 +117,7 @@ export async function answerReading(submissionId, answers, studentId) {
   // KRITIK #2: upsert — dublikat grade yaratilmaydi
   await upsertGrade({
     submissionId: submission._id, studentId,
-    assignmentId: submission.assignmentId, taskId: submission.taskId,
+    taskId: submission.taskId,
     score: totalScore, reason: "auto_graded", finalized: true
   });
 
@@ -162,7 +174,7 @@ export async function submitWriting(submissionId, { text, meta }, studentId) {
     // KRITIK #2: upsert
     await upsertGrade({
       submissionId: submission._id, studentId,
-      assignmentId: submission.assignmentId, taskId: submission.taskId,
+      taskId: submission.taskId,
       score: aiResult.band, reason: "ai_initial", finalized: false
     });
 
@@ -208,23 +220,15 @@ export async function restartSubmission(submissionId, studentId) {
     throw ApiError.badRequest("You can only restart an active unfinished submission");
   }
 
-  const assignmentId = existing.assignmentId;
-  const assignment = await TaskAssignment.findById(assignmentId);
-  if (!assignment || !assignment.isActive) throw ApiError.notFound("Assignment not found");
+  const task = await Task.findById(existing.taskId);
+  if (!task || !task.isActive) throw ApiError.notFound("Task not found");
 
   const now = new Date();
-  if (now < assignment.opensAt) throw ApiError.forbidden("Assignment not opened yet");
-  if (now > assignment.closesAt) throw ApiError.forbidden("Assignment is closed");
 
   // Delete the old unfinished attempt
   await Submission.findByIdAndDelete(submissionId);
 
-  // Create a new one
-  const task = await Task.findById(assignment.taskId);
-  if (!task) throw ApiError.notFound("Task not found");
-
   const newSubmission = await Submission.create({
-    assignmentId,
     taskId: task._id,
     studentId,
     type: task.type,

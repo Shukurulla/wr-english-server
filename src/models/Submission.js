@@ -19,7 +19,7 @@ const aiCriterionSchema = new Schema(
 
 const submissionSchema = new Schema(
   {
-    assignmentId: { type: Schema.Types.ObjectId, ref: "TaskAssignment", required: true },
+    assignmentId: { type: Schema.Types.ObjectId, ref: "TaskAssignment" },
     taskId: { type: Schema.Types.ObjectId, ref: "Task", required: true },
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     type: { type: String, enum: ["reading", "writing"], required: true },
@@ -77,8 +77,12 @@ const submissionSchema = new Schema(
   { timestamps: true }
 );
 
-submissionSchema.index({ studentId: 1, assignmentId: 1 }, { unique: true });
+submissionSchema.index(
+  { studentId: 1, taskId: 1 },
+  { unique: true, partialFilterExpression: { taskId: { $exists: true } } }
+);
 submissionSchema.index({ assignmentId: 1, status: 1 });
+submissionSchema.index({ taskId: 1, status: 1 });
 submissionSchema.index({ studentId: 1, status: 1 });
 
 export const Submission = mongoose.model("Submission", submissionSchema);
