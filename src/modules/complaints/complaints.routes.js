@@ -13,6 +13,6 @@ router.use(requireAuth);
 router.post("/", requireRole("student"), complaintLimiter, validate(schemas.createComplaintSchema), ctrl.create);
 router.get("/my", requireRole("student"), ctrl.myComplaints);
 router.get("/", requireRole("teacher", "admin"), ctrl.teacherComplaints);
-router.patch("/:id/resolve", requireRole("teacher"), validate(schemas.resolveComplaintSchema), ctrl.resolve);
+router.patch("/:id/resolve", requireRole("teacher", "admin"), validate(schemas.resolveComplaintSchema), ctrl.resolve);
 
 export default router;

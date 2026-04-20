@@ -26,7 +26,24 @@ export function buildApp() {
 
   app.set("trust proxy", 1);
   app.use(helmet());
-  app.use(cors({ origin: config.CLIENT_ORIGIN, credentials: true }));
+
+  const allowedOrigins = config.CLIENT_ORIGIN
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  app.use(
+    cors({
+      origin(origin, callback) {
+        // Allow same-origin / curl / server-to-server (no Origin header)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`CORS: origin ${origin} is not allowed`));
+      },
+      credentials: true,
+    })
+  );
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
 
