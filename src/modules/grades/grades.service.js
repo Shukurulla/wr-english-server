@@ -73,14 +73,23 @@ export async function getMyGrades(studentId, { semester }) {
 
   let readingScore = 0;
   let writingScore = 0;
+  let readingMax = 0;
+  let writingMax = 0;
   for (const item of items) {
-    if (item.type === "reading") readingScore += item.score;
-    else writingScore += item.score;
+    if (item.type === "reading") {
+      readingScore += item.score;
+      readingMax += item.maxScore || 0;
+    } else {
+      writingScore += item.score;
+      writingMax += item.maxScore || 0;
+    }
   }
 
+  const finalTestMax = 2;
   const finalTest = await FinalTestAttempt.findOne({ studentId, isFinalized: true }).lean();
   const finalTestScore = finalTest?.totalScore || 0;
   const totalScore = round1(readingScore + writingScore + finalTestScore);
+  const maxScore = round1(readingMax + writingMax + finalTestMax);
 
   return {
     semester: semester || "all",
@@ -88,7 +97,10 @@ export async function getMyGrades(studentId, { semester }) {
     writingScore: round1(writingScore),
     finalTestScore: round1(finalTestScore),
     totalScore,
-    maxScore: 20,
+    maxScore,
+    readingMax: round1(readingMax),
+    writingMax: round1(writingMax),
+    finalTestMax,
     passed: totalScore >= 12,
     items,
     finalTest: finalTest
