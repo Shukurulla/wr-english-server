@@ -93,7 +93,7 @@ export async function resolveComplaint(complaintId, { decision, newScore, teache
     }
   }
 
-  complaint.status = "resolved";
+  complaint.status = decision === "unchanged" ? "rejected" : "resolved";
   complaint.resolution = {
     decision,
     newScore: decision !== "unchanged" ? newScore : undefined,

@@ -26,11 +26,19 @@ export async function listAssignments({ groupId, status, page, limit }) {
   return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
+const COMPLETED_STATUSES = new Set([
+  "auto_graded",
+  "ai_graded",
+  "manual_review",
+  "finalized"
+]);
+
 // New open-access flow: return every active task as a virtual assignment.
-// No TaskAssignment / group filtering; tests are visible to every student.
+// Tasks within the same (type, semester) group unlock sequentially: a task is
+// locked until the previous one (by `order`) has reached a completed status.
 export async function getMyAssignments(user) {
   const tasks = await Task.find({ isActive: true })
-    .sort({ semester: 1, order: 1, createdAt: 1 })
+    .sort({ semester: 1, type: 1, order: 1, createdAt: 1 })
     .lean();
 
   const submissions = await Submission.find({
@@ -41,11 +49,29 @@ export async function getMyAssignments(user) {
   const subMap = {};
   submissions.forEach((s) => { subMap[s.taskId.toString()] = s; });
 
+  // Group by (type, semester) to determine sequential locking
+  const groupedDone = {};
+  tasks.forEach((t) => {
+    const key = `${t.type}-${t.semester}`;
+    if (!groupedDone[key]) groupedDone[key] = new Map();
+    const sub = subMap[t._id.toString()];
+    const isDone = sub && COMPLETED_STATUSES.has(sub.status);
+    groupedDone[key].set(t.order, isDone);
+  });
+
   const now = new Date();
   return tasks.map((t) => {
     const sub = subMap[t._id.toString()];
+    const key = `${t.type}-${t.semester}`;
+    const orderMap = groupedDone[key];
+
+    let locked = false;
+    if (t.order > 1) {
+      const prevDone = orderMap.get(t.order - 1);
+      if (!prevDone) locked = true;
+    }
+
     return {
-      // Keep the shape that the frontend expects (assignment-like)
       _id: t._id,
       taskId: {
         _id: t._id,
@@ -62,6 +88,7 @@ export async function getMyAssignments(user) {
       closesAt: null,
       isActive: true,
       virtual: true,
+      locked,
       submissionId: sub?._id || null,
       submissionStatus: sub?.status || null
     };

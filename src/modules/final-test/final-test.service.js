@@ -1,8 +1,17 @@
 import { FinalTest } from "../../models/FinalTest.js";
 import { FinalTestAttempt } from "../../models/FinalTestAttempt.js";
+import { User } from "../../models/User.js";
 import { ApiError } from "../../utils/api-error.js";
 import { round1 } from "../../services/grader.service.js";
 import crypto from "crypto";
+
+async function getAttemptsAllowed(studentId, semester) {
+  const student = await User.findById(studentId).select("studentInfo").lean();
+  const map = student?.studentInfo?.finalTestAttemptsAllowed;
+  if (!map) return 1;
+  const v = map[String(semester)] ?? map.get?.(String(semester));
+  return Number.isFinite(v) ? v : 1;
+}
 
 function seededShuffle(array, seed) {
   const shuffled = [...array];
@@ -29,7 +38,22 @@ export async function getCurrentTest(semester) {
 export async function startAttempt(studentId, semester, groupId) {
   const test = await getCurrentTest(semester);
 
-  const seed = studentId.toString() + test._id.toString();
+  const allowed = await getAttemptsAllowed(studentId, semester);
+  const existingCount = await FinalTestAttempt.countDocuments({
+    studentId,
+    finalTestId: test._id
+  });
+
+  if (existingCount >= allowed) {
+    throw ApiError.conflict(
+      allowed === 1
+        ? "You have already taken this test"
+        : "All allowed attempts have been used"
+    );
+  }
+
+  const attemptNumber = existingCount + 1;
+  const seed = studentId.toString() + test._id.toString() + ":" + attemptNumber;
   const shuffledQuestions = seededShuffle(test.questions, seed).map((q) => {
     const shuffledOptions = seededShuffle(
       q.options.map((opt, i) => ({ opt, origIndex: i })),
@@ -43,18 +67,18 @@ export async function startAttempt(studentId, semester, groupId) {
     };
   });
 
-  // KRITIK #3: race-safe — unique index xatosini 409 sifatida qaytarish
   let attempt;
   try {
     attempt = await FinalTestAttempt.create({
       finalTestId: test._id,
       studentId,
       groupId,
+      attemptNumber,
       status: "in_progress",
       startedAt: new Date()
     });
   } catch (err) {
-    if (err.code === 11000) throw ApiError.conflict("You have already started this test");
+    if (err.code === 11000) throw ApiError.conflict("This attempt was already started");
     throw err;
   }
 
@@ -108,11 +132,21 @@ export async function submitAttempt(attemptId, answers, studentId) {
 export async function getMyAttempt(studentId, semester) {
   const test = await FinalTest.findOne({ semester, isActive: true }).lean();
   if (!test) return null;
-  const attempt = await FinalTestAttempt.findOne({ studentId, finalTestId: test._id }).lean();
-  if (attempt) {
-    attempt.timeLimit = test.timeLimit;
+
+  const attempts = await FinalTestAttempt.find({ studentId, finalTestId: test._id })
+    .sort({ attemptNumber: -1 })
+    .lean();
+  const allowed = await getAttemptsAllowed(studentId, semester);
+  const latest = attempts[0] || null;
+
+  if (latest) {
+    latest.timeLimit = test.timeLimit;
+    latest.attemptsUsed = attempts.length;
+    latest.attemptsAllowed = allowed;
+    latest.canStartNewAttempt =
+      latest.status !== "in_progress" && attempts.length < allowed;
   }
-  return attempt;
+  return latest;
 }
 
 // Vaqti o'tgan in_progress attemptni avtomatik yakunlash
@@ -141,6 +175,39 @@ export async function forceSubmitExpired(attemptId, studentId) {
   await attempt.save();
 
   return attempt;
+}
+
+// Admin/teacher: bitta talabaga semester bo'yicha qo'shimcha urinish berish
+export async function grantExtraAttempt(studentId, semester, by) {
+  const student = await User.findById(studentId);
+  if (!student || student.role !== "student") throw ApiError.notFound("Student not found");
+
+  if (!student.studentInfo) student.studentInfo = {};
+  if (!student.studentInfo.finalTestAttemptsAllowed) {
+    student.studentInfo.finalTestAttemptsAllowed = new Map([["1", 1], ["2", 1]]);
+  }
+
+  const key = String(semester);
+  const map = student.studentInfo.finalTestAttemptsAllowed;
+  const current = (map.get ? map.get(key) : map[key]) ?? 1;
+  const next = current + 1;
+  if (map.set) map.set(key, next);
+  else map[key] = next;
+
+  student.markModified("studentInfo.finalTestAttemptsAllowed");
+  await student.save();
+
+  const { AuditLog } = await import("../../models/AuditLog.js");
+  await AuditLog.create({
+    actorId: by,
+    actorRole: "teacher",
+    action: "final_test.grant_attempt",
+    entityType: "user",
+    entityId: studentId,
+    metadata: { semester: Number(semester), newAllowed: next }
+  });
+
+  return { studentId, semester: Number(semester), allowed: next };
 }
 
 // O'qituvchi/admin: talabaning attemptini reset qilish

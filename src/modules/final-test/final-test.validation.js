@@ -31,3 +31,10 @@ export const submitFinalTestSchema = z.object({
     )
   })
 });
+
+export const grantAttemptSchema = z.object({
+  body: z.object({
+    studentId: z.string(),
+    semester: z.coerce.number().min(1).max(2)
+  })
+});

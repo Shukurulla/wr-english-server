@@ -47,3 +47,12 @@ export const create = asyncHandler(async (req, res) => {
   const test = await finalTestService.createFinalTest(req.body);
   return created(res, test);
 });
+
+export const grantAttempt = asyncHandler(async (req, res) => {
+  const result = await finalTestService.grantExtraAttempt(
+    req.body.studentId,
+    req.body.semester,
+    req.user._id
+  );
+  return ok(res, result);
+});

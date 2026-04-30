@@ -15,6 +15,7 @@ router.post("/force-submit-expired", requireRole("student"), ctrl.forceSubmitExp
 router.get("/my-attempt", requireRole("student"), ctrl.myAttempt);
 router.get("/group/:groupId/attempts", requireRole("teacher", "admin"), ctrl.groupAttempts);
 router.delete("/attempts/:id", requireRole("teacher", "admin"), ctrl.resetAttempt);
+router.post("/grant-attempt", requireRole("teacher", "admin"), validate(schemas.grantAttemptSchema), ctrl.grantAttempt);
 router.get("/", requireRole("admin"), ctrl.list);
 router.post("/questions", requireRole("admin"), validate(schemas.createFinalTestSchema), ctrl.create);
 

@@ -3,52 +3,51 @@ import mongoose from "mongoose";
 import { config } from "../config/env.js";
 import { User } from "../models/User.js";
 
+const ADMINS = [
+  { fullName: "Platform Admin", email: "admin@platform.uz", password: "admin12345" },
+  { fullName: "Admin Two", email: "admin2@platform.uz", password: "admin12345" },
+  { fullName: "Admin Three", email: "admin3@platform.uz", password: "admin12345" },
+];
+
+const TEACHERS = [
+  { fullName: "Test Teacher", email: "teacher@platform.uz", password: "teacher12345", department: "English" },
+  { fullName: "Musa Teacher", email: "musa@platform.uz", password: "teacher12345", department: "English" },
+  { fullName: "Aigerim Teacher", email: "aigerim@platform.uz", password: "teacher12345", department: "English" },
+  { fullName: "Dilnoza Teacher", email: "dilnoza@platform.uz", password: "teacher12345", department: "English" },
+];
+
+const STUDENTS = [
+  { fullName: "Test Student", email: "student@platform.uz", password: "student12345", studentId: "STD-001" },
+];
+
+async function upsertUser({ role, fullName, email, password, ...extra }) {
+  const exists = await User.findOne({ email });
+  if (exists) return { email, status: "skipped" };
+
+  const passwordHash = await User.hashPassword(password);
+  const doc = { fullName, email, passwordHash, role };
+  if (role === "teacher") doc.teacherInfo = { department: extra.department };
+  if (role === "student") doc.studentInfo = { studentId: extra.studentId, course: 1, enrollmentYear: 2026 };
+
+  await User.create(doc);
+  return { email, status: "created", password };
+}
+
 async function seed() {
   await mongoose.connect(config.MONGO_URI);
   console.log("Connected to", config.MONGO_URI);
 
-  const adminExists = await User.findOne({ email: "admin@platform.uz" });
-  if (!adminExists) {
-    const passwordHash = await User.hashPassword("admin12345");
-    await User.create({
-      fullName: "Platform Admin",
-      email: "admin@platform.uz",
-      passwordHash,
-      role: "admin"
-    });
-    console.log("Admin created: admin@platform.uz / admin12345");
-  } else {
-    console.log("Admin already exists");
-  }
+  const results = [];
+  for (const a of ADMINS) results.push(await upsertUser({ role: "admin", ...a }));
+  for (const t of TEACHERS) results.push(await upsertUser({ role: "teacher", ...t }));
+  for (const s of STUDENTS) results.push(await upsertUser({ role: "student", ...s }));
 
-  const teacherExists = await User.findOne({ email: "teacher@platform.uz" });
-  if (!teacherExists) {
-    const passwordHash = await User.hashPassword("teacher12345");
-    await User.create({
-      fullName: "Test Teacher",
-      email: "teacher@platform.uz",
-      passwordHash,
-      role: "teacher",
-      teacherInfo: { department: "English" }
-    });
-    console.log("Teacher created: teacher@platform.uz / teacher12345");
-  } else {
-    console.log("Teacher already exists");
-  }
-
-  const studentExists = await User.findOne({ email: "student@platform.uz" });
-  if (!studentExists) {
-    const passwordHash = await User.hashPassword("student12345");
-    await User.create({
-      fullName: "Test Student",
-      email: "student@platform.uz",
-      passwordHash,
-      role: "student",
-      studentInfo: { studentId: "STD-001", course: 1, enrollmentYear: 2026 }
-    });
-    console.log("Student created: student@platform.uz / student12345");
-  } else {
-    console.log("Student already exists");
+  for (const r of results) {
+    if (r.status === "created") {
+      console.log(`Created: ${r.email} / ${r.password}`);
+    } else {
+      console.log(`Skipped (exists): ${r.email}`);
+    }
   }
 
   await mongoose.disconnect();

@@ -14,7 +14,7 @@ const schema = z.object({
   JWT_REFRESH_EXPIRES: z.string().default("30d"),
 
   OPENAI_API_KEY: z.string().optional(),
-  AI_MODEL: z.string().default("gpt-4o-nano"),
+  AI_MODEL: z.string().default("gpt-4o-mini"),
   AI_TIMEOUT_MS: z.coerce.number().default(30000),
 
   CLIENT_ORIGIN: z.string().default("http://localhost:3000"),

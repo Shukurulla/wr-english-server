@@ -8,7 +8,12 @@ const studentInfoSchema = new Schema(
     studentId: { type: String, trim: true },
     groupId: { type: Schema.Types.ObjectId, ref: "Group" },
     course: { type: Number, min: 1, max: 6 },
-    enrollmentYear: Number
+    enrollmentYear: Number,
+    finalTestAttemptsAllowed: {
+      type: Map,
+      of: Number,
+      default: () => new Map([["1", 1], ["2", 1]])
+    }
   },
   { _id: false }
 );

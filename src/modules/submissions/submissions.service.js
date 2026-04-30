@@ -20,6 +20,13 @@ async function upsertGrade({ submissionId, studentId, taskId, score, reason, fin
   );
 }
 
+const COMPLETED_STATUSES = new Set([
+  "auto_graded",
+  "ai_graded",
+  "manual_review",
+  "finalized"
+]);
+
 export async function startSubmission({ taskId, assignmentId, studentId }) {
   // Accept either taskId (new flow) or assignmentId (legacy flow)
   let task;
@@ -40,6 +47,28 @@ export async function startSubmission({ taskId, assignmentId, studentId }) {
     }
   } else {
     throw ApiError.badRequest("taskId is required");
+  }
+
+  // Sequential unlock guard: previous task in the same (type, semester) group
+  // must be completed before this one can be started.
+  if (task.order > 1) {
+    const prevTask = await Task.findOne({
+      type: task.type,
+      semester: task.semester,
+      order: task.order - 1,
+      isActive: true
+    }).select("_id");
+    if (prevTask) {
+      const prevSub = await Submission.findOne({
+        taskId: prevTask._id,
+        studentId
+      }).select("status");
+      if (!prevSub || !COMPLETED_STATUSES.has(prevSub.status)) {
+        throw ApiError.unprocessable(
+          "You must complete the previous task before starting this one"
+        );
+      }
+    }
   }
 
   const now = new Date();

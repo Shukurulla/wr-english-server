@@ -17,6 +17,8 @@ const finalTestAttemptSchema = new Schema(
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     groupId: { type: Schema.Types.ObjectId, ref: "Group" },
 
+    attemptNumber: { type: Number, default: 1, min: 1 },
+
     status: {
       type: String,
       enum: ["in_progress", "submitted", "graded"],
@@ -34,6 +36,9 @@ const finalTestAttemptSchema = new Schema(
   { timestamps: true }
 );
 
-finalTestAttemptSchema.index({ studentId: 1, finalTestId: 1 }, { unique: true });
+finalTestAttemptSchema.index(
+  { studentId: 1, finalTestId: 1, attemptNumber: 1 },
+  { unique: true }
+);
 
 export const FinalTestAttempt = mongoose.model("FinalTestAttempt", finalTestAttemptSchema);
