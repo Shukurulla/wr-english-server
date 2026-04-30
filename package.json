@@ -11,6 +11,7 @@
     "seed:tasks": "node src/seed/seed-tasks.js",
     "seed:final-test": "node src/seed/seed-final-test.js",
     "seed:users": "node src/seed/seed-users.js",
+    "fix:writing-grades": "node src/seed/fix-writing-grades.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

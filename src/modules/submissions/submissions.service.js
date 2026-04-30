@@ -209,11 +209,14 @@ export async function submitWriting(submissionId, { text, meta }, studentId) {
     submission.totalScore = aiResult.band;
     submission.status = "ai_graded";
 
-    // KRITIK #2: upsert
+    // The AI grade IS the final grade for self-study tasks.
+    // It can still be overridden later by complaint resolution.
+    // Marking finalized=true ensures the score is included in aggregates and
+    // students can file complaints immediately.
     await upsertGrade({
       submissionId: submission._id, studentId,
       taskId: submission.taskId,
-      score: aiResult.band, reason: "ai_initial", finalized: false
+      score: aiResult.band, reason: "ai_initial", finalized: true
     });
 
     await AuditLog.create({
